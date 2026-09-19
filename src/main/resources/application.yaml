@@ -1,3 +1,117 @@
+server:
+  port: 8009
+
 spring:
   application:
-    name: Know-Q-A
+    name: know_Q_A
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    url: jdbc:mysql://127.0.0.1:3306/know_engine?rewriteBatchedStatements=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # druid:
+    initial-size: 5
+    min-idle: 5
+    max-active: 20
+    max-wait: 60000
+    time-between-eviction-runs-millis: 60000
+    min-evictable-idle-time-millis: 300000
+    validation-query: SELECT 1
+    test-while-idle: true
+    test-on-borrow: false
+    test-on-return: false
+    pool-prepared-statements: true
+    max-pool-prepared-statement-per-connection-size: 20
+    filters: stat,wall
+    connection-properties: druid.stat.mergeSql=true;druid.stat.slowSqlMillis=5000
+    stat-view-servlet:
+      enabled: true
+      url-pattern: /druid/*
+      login-username: admin
+      login-password: admin
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      ssl:
+        enabled: false
+  redis:
+    redisson:
+      config: |
+        singleServerConfig:
+          idleConnectionTimeout: 10000
+          connectTimeout: 10000
+          timeout: 3000
+          retryAttempts: 3
+          retryInterval: 1500
+          password: null
+          subscriptionsPerConnection: 5
+          clientName: null
+          address: "redis://localhost:6379"
+          subscriptionConnectionMinimumIdleSize: 1
+          subscriptionConnectionPoolSize: 50
+          connectionMinimumIdleSize: 24
+          connectionPoolSize: 64
+          database: 0
+          dnsMonitoringInterval: 5000
+        threads: 16
+        nettyThreads: 32
+        codec: !<org.redisson.codec.JsonJacksonCodec> {}
+        transportMode: "NIO"
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+# 通义 DashScope API Key（兼容 OpenAI 接口），请填入你自己的密钥
+dashscope:
+  api-key: sk-369f9327cf81473da8f3a4395d0dd524
+
+langchain4j:
+  open-ai:
+    chat-model:
+      api-key: ${dashscope.api-key}
+      model-name: qwen3.6-flash
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      log-requests: true
+      log-responses: true
+    streaming-chat-model:
+      api-key: ${dashscope.api-key}
+      model-name: qwen3.6-flash
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      log-requests: true
+      log-responses: true
+
+elasticsearch:
+  host: http://127.0.0.1:9200
+  base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  model-name: text-embedding-v4
+  api-key: ${dashscope.api-key}
+  dimensions: 1536
+
+# MinIO 两个端口不要混用：
+#   --address          S3 API 端口，Java SDK / 预签名 URL 必须走这个
+#   --console-address  控制台 Web UI，只能浏览器打开，不能给 MinioClient 用
+# 启动命令：.\minio.exe server "D:\soft\minio\data" --address "127.0.0.1:9090" --console-address "127.0.0.1:9000"
+# http://127.0.0.1:9000/browser 可访问Web控制台
+minio:
+  url: http://127.0.0.1:9090
+  accessKey: minioadmin # 默认是这个,可以不改
+  secretKey: minioadmin # 默认是这个,可以不改
+  bucketName: know-engine # 默认是这个,可以不改
+  endpoint: http://127.0.0.1:9090 # 必须指向 --address（S3 API），不是控制台端口
+
+# 文件解析服务配置
+file:
+  parse:
+    api:
+      url: http://localhost:8000 # 文档解析接口地址，记得改成你自己的
