@@ -11,6 +11,7 @@ import org.example.knowqa.document.service.DocumentProcessService;
 import org.example.knowqa.document.service.DocumentService;
 import org.example.knowqa.document.service.DocumentVersionService;
 import org.example.knowqa.document.service.FileStorageService;
+import org.example.knowqa.infra.lock.DistributeLock;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,6 +32,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
     @Resource
     private FileStorageService fileStorageService;
     @Override
+    @DistributeLock(scene = "document-upload",keyExpression = "#uploadUser",waitTime = 0)
     public Document upload(DocumentUploadParam documentUploadParam, String uploadUser) throws IOException {
         // 计算文件hash
         String contentHash=calculateContentHash(documentUploadParam.getFile());
@@ -42,7 +44,6 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         Document document=new Document().create(documentUploadParam);
         boolean ok = documentService.save(document);
         Assert.isTrue(ok,"文件上传失败");
-
         log.info("start to upload ....");
         String fileName = documentUploadParam.getFile().getOriginalFilename();
         String fileUrl;
