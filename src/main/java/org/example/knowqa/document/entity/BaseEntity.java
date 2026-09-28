@@ -15,7 +15,7 @@ public class BaseEntity {
     protected LocalDateTime createdAt;
     // 修改时间
     @TableField(fill = FieldFill.INSERT_UPDATE)
-    protected LocalDateTime updateAt;
+    protected LocalDateTime updatedAt;
     // 乐观锁版本号
     @Version
     protected Integer lockVersion;

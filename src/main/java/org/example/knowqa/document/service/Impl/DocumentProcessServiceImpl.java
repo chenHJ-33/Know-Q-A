@@ -1,7 +1,6 @@
 package org.example.knowqa.document.service.Impl;
 
 import jakarta.annotation.Resource;
-import kotlin.io.path.IllegalFileNameException;
 import lombok.extern.slf4j.Slf4j;
 import org.example.knowqa.document.constant.DocumentStatus;
 import org.example.knowqa.document.entity.Document;
