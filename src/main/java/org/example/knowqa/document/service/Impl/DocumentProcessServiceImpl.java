@@ -10,6 +10,7 @@ import org.example.knowqa.document.service.DocumentProcessService;
 import org.example.knowqa.document.service.DocumentService;
 import org.example.knowqa.document.service.DocumentVersionService;
 import org.example.knowqa.document.service.FileStorageService;
+import org.example.knowqa.document.util.VersionUtil;
 import org.example.knowqa.infra.lock.DistributeLock;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
@@ -70,6 +71,49 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         documentInDb.setCurrentVersionId(versionRecord.getVersionId());
         ok=documentService.updateById(documentInDb);
         Assert.isTrue(ok,"文档当前版本更新失败");
+        return document;
+    }
+
+    @Override
+    @DistributeLock(scene = "document-upload",keyExpression = "#uploadUser",waitTime = 0)
+    public Document uploadNewVersion(Long docId, String version, MultipartFile file, String uploadUser, String changelog) throws IOException {
+        // 查询文档
+        Document document=documentService.getById(docId);
+        Assert.notNull(document,"文档不存在");
+        // 校验版本号》最大版本号
+        String latestVersion=documentVersionService.getLatestVersion(docId);
+        if (latestVersion!=null&& VersionUtil.compareVersion(version,latestVersion)<=0){
+            throw  new IllegalArgumentException("版本号"+version+" 不大于现有最大版本号 "+latestVersion);
+        }
+        // 计算hash
+        String contentHash = calculateContentHash(file);
+        // 检查是否存在相同
+        if (documentVersionService.existsByContentHash(contentHash)){
+            throw new IllegalArgumentException("文档已存在，请勿重复上传");
+        }
+        DocumentVersion versionRecord=null;
+        log.info("start to upload version {} for doc {} ...",version,docId);
+        // 上传minIO
+        String fileName = file.getName();
+        String fileURL=null;
+        try {
+            fileURL = fileStorageService.uploadFile(file, fileName);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        // 创建文档记录
+        versionRecord = createVersionRecord(document.getDocId(), version, fileURL, null, uploadUser, contentHash, DocumentStatus.UPLOADED, changelog);
+        document.setCurrentVersionId(versionRecord.getVersionId());
+        // 处理文档获取URL
+        String convertedDocUrl = processFile(fileName, file, document, fileURL);
+        // 更新URL
+        versionRecord=documentVersionService.getById(versionRecord.getVersionId());
+        versionRecord.setConvertedDocUrl(convertedDocUrl);
+        boolean ok=documentVersionService.updateById(versionRecord);
+        Assert.isTrue(ok,"版本记录更新失败");
+        ok=documentService.updateById(document);
+        Assert.isTrue(ok,"文档当前版本更新失败");
+        log.info("文档{}新版本{}上传完成，旧版本数据保留中，待新版本向量化后清理",docId,version);
         return document;
     }
 

@@ -8,4 +8,5 @@ public interface DocumentVersionService extends IService<DocumentVersion> {
     boolean existsByContentHash(String contentHash);
 
 
+    String getLatestVersion(Long docId);
 }

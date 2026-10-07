@@ -32,4 +32,15 @@ public class DocumentController {
         return documentProcessService.upload(new DocumentUploadParam(file, title, description, version),
                 DefaultUser.userNameOrDefault(uploadUser));
     }
+    // 上传文件新版本
+    @PostMapping("/upload-version")
+    public Document uploadVersion(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("docId") Long docId,
+            @RequestParam("version") String version,
+            @RequestParam(value = "changelog",required = false) String changelog,
+            @RequestParam(value = "uploadUser",required = false) String uploadUser
+    ) throws IOException {
+        return documentProcessService.uploadNewVersion(docId,version,file,DefaultUser.userNameOrDefault(uploadUser),changelog);
+    }
 }
