@@ -5,14 +5,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.knowqa.common.DefaultUser;
 import org.example.knowqa.document.entity.Document;
 import org.example.knowqa.document.entity.DocumentUploadParam;
+import org.example.knowqa.document.entity.DocumentVersion;
 import org.example.knowqa.document.service.DocumentProcessService;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.example.knowqa.document.service.DocumentVersionService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/document")
@@ -20,6 +21,9 @@ import java.io.IOException;
 public class DocumentController {
     @Resource
     private DocumentProcessService documentProcessService;
+    @Autowired
+    private DocumentVersionService documentVersionService;
+
     // 上传文档
     @PostMapping("/upload")
     public Document uploadFile(
@@ -42,5 +46,11 @@ public class DocumentController {
             @RequestParam(value = "uploadUser",required = false) String uploadUser
     ) throws IOException {
         return documentProcessService.uploadNewVersion(docId,version,file,DefaultUser.userNameOrDefault(uploadUser),changelog);
+    }
+
+    // 查询文件所有版本
+    @GetMapping("/versions/{docId}")
+    public List<DocumentVersion> listVersions(@PathVariable Long docId) {
+        return documentVersionService.listByDocId(docId);
     }
 }

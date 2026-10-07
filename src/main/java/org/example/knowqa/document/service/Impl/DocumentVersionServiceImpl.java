@@ -19,17 +19,21 @@ public class DocumentVersionServiceImpl extends ServiceImpl<DocumentVersionMappe
 
     @Override
     public String getLatestVersion(Long docId) {
-        List<DocumentVersion> versions=listbyDocId(docId);
+        List<DocumentVersion> versions=listByDocId(docId);
         if (versions.isEmpty()){
             return null;
         }
         return versions.get(0).getVersion();
     }
-    private static final Comparator<DocumentVersion> VERSION_COMPARATOR=
-            Comparator.comparing(DocumentVersion::getVersion, VersionUtil::compareVersion);
-    private List<DocumentVersion> listbyDocId(Long docId) {
+
+    @Override
+    public List<DocumentVersion> listByDocId(Long docId) {
         List<DocumentVersion> versions = lambdaQuery().eq(DocumentVersion::getDocId, docId).list();
         versions.sort(VERSION_COMPARATOR.reversed());
         return versions;
     }
+
+
+    private static final Comparator<DocumentVersion> VERSION_COMPARATOR =
+            Comparator.comparing(DocumentVersion::getVersion, VersionUtil::compareVersion);
 }

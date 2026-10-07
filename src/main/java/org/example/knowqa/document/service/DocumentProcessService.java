@@ -2,9 +2,11 @@ package org.example.knowqa.document.service;
 
 import org.example.knowqa.document.entity.Document;
 import org.example.knowqa.document.entity.DocumentUploadParam;
+import org.example.knowqa.document.entity.DocumentVersion;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 
 public interface DocumentProcessService {
     // 上传文件
