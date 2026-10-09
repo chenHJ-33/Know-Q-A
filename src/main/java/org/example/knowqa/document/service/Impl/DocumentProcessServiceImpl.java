@@ -1,18 +1,25 @@
 package org.example.knowqa.document.service.Impl;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.example.knowqa.document.constant.DocumentStatus;
+import org.example.knowqa.document.constant.SegmentStatus;
 import org.example.knowqa.document.entity.Document;
 import org.example.knowqa.document.entity.DocumentUploadParam;
 import org.example.knowqa.document.entity.DocumentVersion;
-import org.example.knowqa.document.service.DocumentProcessService;
-import org.example.knowqa.document.service.DocumentService;
-import org.example.knowqa.document.service.DocumentVersionService;
-import org.example.knowqa.document.service.FileStorageService;
+import org.example.knowqa.document.entity.KnowledgeSegment;
+import org.example.knowqa.document.mapper.SegmentMapper;
+import org.example.knowqa.document.service.*;
 import org.example.knowqa.document.util.VersionUtil;
 import org.example.knowqa.infra.lock.DistributeLock;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,6 +39,11 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
     private DocumentService documentService;
     @Resource
     private FileStorageService fileStorageService;
+    @Resource
+    private SegmentMapper segmentMapper;
+    @Resource
+    private SegmentService segmentService;
+
     @Override
     @DistributeLock(scene = "document-upload",keyExpression = "#uploadUser",waitTime = 0)
     public Document upload(DocumentUploadParam documentUploadParam, String uploadUser) throws IOException {
@@ -116,6 +128,73 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         Assert.isTrue(ok,"文档当前版本更新失败");
         log.info("文档{}新版本{}上传完成，旧版本数据保留中，待新版本向量化后清理",docId,version);
         return document;
+    }
+
+    @Override
+    @DistributeLock(scene = "document-upload",keyExpression = "#docId",waitTime = 0)
+    @Transactional(rollbackFor = Exception.class)
+    public Document switchVersion(Long docId, Long versionId) {
+        // 查询文档
+        Document document = documentService.getById(docId);
+        Assert.notNull(document,"文档不存在");
+        // 查询目标版本
+        DocumentVersion versionRecord = documentVersionService.getById(versionId);
+        Assert.notNull(versionRecord,"版本不存在");
+        Assert.isTrue(versionRecord.getDocId().equals(docId),"版本不属于该文档");
+        // 对比
+        // 当前版本等于目标版本
+        if (versionId.equals(document.getCurrentVersionId())) {
+            return document;
+        }
+        // 切换
+        log.info("切换文档 {} 的版本：从 versionId={} 切换到 versionId={}", docId, document.getCurrentVersionId(), versionId);
+        LambdaUpdateWrapper<KnowledgeSegment> updateWrapper = Wrappers.<KnowledgeSegment>lambdaUpdate()
+                .set(KnowledgeSegment::getStatus, SegmentStatus.STORED)
+                .eq(KnowledgeSegment::getDocumentId, document.getDocId())
+                .eq(KnowledgeSegment::getDocumentVersion, document.getCurrentVersionId());
+        int segAffected=segmentMapper.update(null,updateWrapper);
+        log.info("切换版本：旧版本分段状态降级完成, affected={}", segAffected);
+
+        boolean ok=embedAndStore(versionRecord);
+        Assert.isTrue(ok,"更新文档片段状态失败");
+
+        // 更新文档
+        document.setCurrentVersionId(versionId);
+        ok = documentService.updateById(document);
+        Assert.isTrue(ok,"更新文档版本失败");
+        return document;
+    }
+    @DistributeLock(scene = "document-embed",keyExpression = "#documentVersion.versionId",waitTime = 0)
+    private boolean embedAndStore(DocumentVersion documentVersion) {
+        if (documentVersion==null)return false;
+        if (documentVersion.getStatus() == DocumentStatus.VECTOR_STORED) {
+            log.info("文档版本状态已为VECTOR_STORED，无需重复向量化: {}", documentVersion.getVersionId());
+            return true;
+        }
+        if (documentVersion.getStatus() != DocumentStatus.CHUNKED) {
+            log.warn("文档版本状态不是CHUNKED，无法完成向量化: {}", documentVersion.getStatus());
+            return false;
+        }
+        documentService.activateVersion(documentVersion.getVersionId());
+        // 检查
+        long segmentCount=segmentService.count(new QueryWrapper<KnowledgeSegment>()
+                .eq("document_id",documentVersion.getDocId())
+                .eq("document_version",documentVersion.getVersionId())
+                .eq("status",SegmentStatus.STORED)
+                .eq("skip_embedding",0)
+        );
+        if (segmentCount == 0) {
+            // 针对非当前版本的文档，取消激活
+            List<DocumentVersion> documentVersions = documentVersionService.list(new QueryWrapper<DocumentVersion>()
+                    .eq("doc_id", documentVersion.getDocId())
+                    .eq("status", DocumentStatus.VECTOR_STORED)
+                    .ne("version_id", documentVersion.getVersionId()));
+
+            documentVersions.forEach(version -> documentService.deactivateVersion(version.getVersionId()));
+            return true;
+        }
+        log.warn("向量存储失败，存在部分分段没有存储成功，未成功的数量： " + segmentCount);
+        return false;
     }
 
     private String processFile(String fileName, MultipartFile documentUploadParam, Document document, String fileUrl)throws IOException {

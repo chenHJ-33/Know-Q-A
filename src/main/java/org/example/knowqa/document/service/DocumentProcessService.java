@@ -13,4 +13,6 @@ public interface DocumentProcessService {
     Document upload(DocumentUploadParam documentUploadParam, String s) throws IOException;
     // 上传文件新版本
     Document uploadNewVersion(Long docId, String version, MultipartFile file, String s, String changelog) throws IOException;
+
+    Document switchVersion(Long docId, Long versionId);
 }

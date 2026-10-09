@@ -10,4 +10,8 @@ public interface DocumentService extends IService<Document> {
     boolean removeDocumentWithSegments(Long docId);
 
     boolean advanceDocumentAndVersionStatus(Long docId, Long currentVersionId, DocumentStatus documentStatus);
+
+    void activateVersion(Long versionId);
+
+    void deactivateVersion(Long versionId);
 }
