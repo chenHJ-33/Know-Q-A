@@ -7,6 +7,7 @@ import org.example.knowqa.document.entity.Document;
 import org.example.knowqa.document.entity.DocumentUploadParam;
 import org.example.knowqa.document.entity.DocumentVersion;
 import org.example.knowqa.document.service.DocumentProcessService;
+import org.example.knowqa.document.service.DocumentService;
 import org.example.knowqa.document.service.DocumentVersionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +24,8 @@ public class DocumentController {
     private DocumentProcessService documentProcessService;
     @Autowired
     private DocumentVersionService documentVersionService;
+    @Autowired
+    private DocumentService documentService;
 
     // 上传文档
     @PostMapping("/upload")
@@ -57,7 +60,14 @@ public class DocumentController {
 
     // 切换文档到指定版本
     @PostMapping("/switch-version")
-    public Document switchVersion(@RequestParam("docId") Long docId,@RequestParam("versionId") Long versionId){
-        return documentProcessService.switchVersion(docId,versionId);
+    public Document switchVersion(@RequestParam("docId") Long docId, @RequestParam("versionId") Long versionId) {
+        return documentProcessService.switchVersion(docId, versionId);
     }
+
+    // 让指定版本生效
+    @PostMapping("/activate-version")
+    public void activateVersion(@RequestParam("versionId") Long versionId) {
+        documentService.activateVersion(versionId);
+    }
+
 }
