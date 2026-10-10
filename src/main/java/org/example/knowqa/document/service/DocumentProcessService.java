@@ -18,4 +18,6 @@ public interface DocumentProcessService {
     Document switchVersion(Long docId, Long versionId);
 
     int split(Document document, DocumentSplitParam documentSplitParam);
+
+    boolean embedAndStore(DocumentVersion documentVersion);
 }

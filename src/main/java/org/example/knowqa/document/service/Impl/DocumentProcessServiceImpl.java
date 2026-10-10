@@ -291,9 +291,9 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         }
         return JSON.toJSONString(metadata.toMap());
     }
-
+    @Override
     @DistributeLock(scene = "document-embed",keyExpression = "#documentVersion.versionId",waitTime = 0)
-    private boolean embedAndStore(DocumentVersion documentVersion) {
+    public boolean embedAndStore(DocumentVersion documentVersion) {
         if (documentVersion==null)return false;
         if (documentVersion.getStatus() == DocumentStatus.VECTOR_STORED) {
             log.info("文档版本状态已为VECTOR_STORED，无需重复向量化: {}", documentVersion.getVersionId());
