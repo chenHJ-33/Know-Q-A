@@ -4,6 +4,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.example.knowqa.common.DefaultUser;
 import org.example.knowqa.document.entity.Document;
+import org.example.knowqa.document.entity.DocumentSplitParam;
 import org.example.knowqa.document.entity.DocumentUploadParam;
 import org.example.knowqa.document.entity.DocumentVersion;
 import org.example.knowqa.document.service.DocumentProcessService;
@@ -69,5 +70,19 @@ public class DocumentController {
     public void activateVersion(@RequestParam("versionId") Long versionId) {
         documentService.activateVersion(versionId);
     }
+    // 对文档进行切分
+    @PostMapping("/split/{documentId}")
+    public Integer splitDocument(
+            @PathVariable Long documentId,
+            @RequestParam("splitType") String splitType,
+            @RequestParam("chunkSize") Integer chunkSize,
+            @RequestParam(value = "overlap",required = false) Integer overlap,
+            @RequestParam(value = "regex",required = false) String regex,
+            @RequestParam(value = "titleLevel",required = false) Integer titleLevel,
+            @RequestParam(value = "separator",required = false) String separator
 
+    ){
+        Document document = documentService.getById(documentId);
+        return documentProcessService.split(document,new DocumentSplitParam(splitType,chunkSize,overlap,titleLevel,separator,regex));
+    }
 }

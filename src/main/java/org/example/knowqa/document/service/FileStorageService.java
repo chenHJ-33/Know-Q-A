@@ -1,10 +1,16 @@
 package org.example.knowqa.document.service;
 
 import io.minio.*;
+import io.minio.errors.*;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 
 @Service
 public class FileStorageService {
@@ -39,5 +45,15 @@ public class FileStorageService {
                 );
             }
         }
+    }
+
+    public InputStream downloadFile(String objectName) throws Exception {
+        GetObjectResponse response = minioClient.getObject(
+                GetObjectArgs.builder()
+                        .bucket(bucketName)
+                        .object(objectName)
+                        .build()
+        );
+        return response;
     }
 }

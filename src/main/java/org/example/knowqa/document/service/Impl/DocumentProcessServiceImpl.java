@@ -1,38 +1,55 @@
 package org.example.knowqa.document.service.Impl;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.google.common.base.Stopwatch;
+import dev.langchain4j.data.document.DocumentSplitter;
+import dev.langchain4j.data.document.Metadata;
+import dev.langchain4j.data.segment.TextSegment;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.example.knowqa.document.constant.DocumentStatus;
+import org.example.knowqa.document.constant.FileType;
 import org.example.knowqa.document.constant.SegmentStatus;
-import org.example.knowqa.document.entity.Document;
-import org.example.knowqa.document.entity.DocumentUploadParam;
-import org.example.knowqa.document.entity.DocumentVersion;
-import org.example.knowqa.document.entity.KnowledgeSegment;
+import org.example.knowqa.document.entity.*;
+import org.example.knowqa.document.event.DocumentChunkedEvent;
 import org.example.knowqa.document.mapper.SegmentMapper;
 import org.example.knowqa.document.service.*;
+import org.example.knowqa.document.util.FileTypeUtil;
 import org.example.knowqa.document.util.VersionUtil;
 import org.example.knowqa.infra.lock.DistributeLock;
+import org.example.knowqa.infra.snowflake.DocumentSplitterFactory;
+import org.example.knowqa.infra.snowflake.SnowflakeIdGenerator;
+import org.example.knowqa.rag.constant.MetadataKeyConstant;
+import org.example.knowqa.rag.sqlitter.ExcelSplitter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
+import org.springframework.util.StopWatch;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 
 @Service
 @Slf4j
 public class DocumentProcessServiceImpl implements DocumentProcessService {
+    @Value("${minio.bucketName}")
+    private String bucketName;
     @Resource
     private DocumentVersionService documentVersionService;
     @Resource
@@ -43,6 +60,8 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
     private SegmentMapper segmentMapper;
     @Resource
     private SegmentService segmentService;
+    @Resource
+    private ApplicationEventPublisher eventPublisher;
 
     @Override
     @DistributeLock(scene = "document-upload",keyExpression = "#uploadUser",waitTime = 0)
@@ -164,6 +183,115 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         Assert.isTrue(ok,"更新文档版本失败");
         return document;
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    @DistributeLock(scene = "document-split",keyExpression = "#document.docId",waitTime = 0)
+    public int split(Document document, DocumentSplitParam documentSplitParam) {
+        // 查询文档
+        Assert.notNull(document,"文档不存在");
+        // 从版本表中获取当前版本文件的URL
+        DocumentVersion versionRecord = documentVersionService.getById(document.getCurrentVersionId());
+        Assert.notNull(versionRecord,"文档版本不存在");
+        Assert.notNull(versionRecord.getConvertedDocUrl(),"文档转换为完成");
+        if (versionRecord.getStatus() == DocumentStatus.CHUNKED) {
+            // 返回已切片的分段数量
+            Long chunkedCount=segmentService.count(new QueryWrapper<KnowledgeSegment>()
+                    .eq("document_id",document.getDocId())
+                    .eq("document_version",document.getCurrentVersionId())
+                    .eq("skip_embedding",0));
+            return chunkedCount.intValue();
+        }
+        if (versionRecord.getStatus() != DocumentStatus.CONVERTED) {
+            throw new RuntimeException("文档状态不为CONVERTED，无法完成切分");
+        }
+        // 从minIO下载文件内容
+        String convertedDocUrl = versionRecord.getConvertedDocUrl();
+        String objectName=extractObjectNameFromUrl(convertedDocUrl);
+        Assert.notNull(objectName,"无法解析文档URL");
+        List<KnowledgeSegment> knowledgeSegments=new ArrayList<>();
+        List<TextSegment> segments;
+        try(InputStream inputStream=fileStorageService.downloadFile(objectName)) {
+            if (FileType.EXCEL== FileTypeUtil.getFileType(convertedDocUrl)||FileType.CSV==FileTypeUtil.getFileType(convertedDocUrl)){
+                ExcelSplitter splitter=new ExcelSplitter(documentSplitParam.getChunkSize(),false);
+                segments=splitter.split(inputStream.readAllBytes(),objectName);
+            }else {
+                DocumentSplitter splitter = DocumentSplitterFactory.getInstance(documentSplitParam);
+                dev.langchain4j.data.document.Document doc= dev.langchain4j.data.document.Document.from(new String(inputStream.readAllBytes(), StandardCharsets.UTF_8));
+                segments=splitter.split(doc);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("下载文档失败"+e.getMessage());
+        }
+        // 转换为KnowledgeSegment并保存
+        for (int i=0;i<segments.size();i++) {
+            TextSegment segment=segments.get(i);
+            Metadata metadata = segment.metadata();
+            String chunkId = metadata.getString(MetadataKeyConstant.CHUNK_ID);
+            if (chunkId == null || chunkId.isBlank()) {
+                chunkId= SnowflakeIdGenerator.getInstance().nextIdStr();
+                metadata.put(MetadataKeyConstant.CHUNK_ID,chunkId);
+            }
+            KnowledgeSegment knowledgeSegment=new KnowledgeSegment();
+            knowledgeSegment.setText(segment.text());
+            knowledgeSegment.setChunkId(chunkId);
+            knowledgeSegment.setMetadata(enrichMetadata(document,versionRecord,metadata));
+            knowledgeSegment.setDocumentId(document.getDocId());
+            knowledgeSegment.setDocumentVersion(document.getCurrentVersionId());
+            knowledgeSegment.setChunkOrder(i);
+            // 检查是否需要跳过嵌入
+            Integer skipEmbedding = metadata.getInteger(MetadataKeyConstant.SKIP_EMBEDDING);
+            if (skipEmbedding != null && skipEmbedding == 1) {
+                knowledgeSegment.setSkipEmbedding(1);
+                knowledgeSegment.setStatus(SegmentStatus.STORED);
+            }else {
+                knowledgeSegment.setSkipEmbedding(0);
+                knowledgeSegment.setStatus(SegmentStatus.STORED);
+            }
+            knowledgeSegments.add(knowledgeSegment);
+        }
+        // 批量保存片段
+        Stopwatch stopwatch = Stopwatch.createStarted();
+        boolean ok = segmentService.saveBatch(knowledgeSegments);
+        Assert.isTrue(ok,"保存知识片段失败");
+        log.info("保存知识片段耗时：{}",stopwatch.elapsed().toMillis());
+        int segmentCount = knowledgeSegments.size();
+        // 更新文档状态为CHUNKED，并保存分段参数
+        ok=documentService.advanceDocumentAndVersionStatus(document.getDocId(),document.getCurrentVersionId(),DocumentStatus.CHUNKED);
+        Assert.isTrue(ok,"更新文档版本失败");
+        // 发送文档已分段事件
+        publishChunkEvent(document,segmentCount);
+        return segmentCount;
+    }
+
+    private void publishChunkEvent(Document document, int segmentCount) {
+        log.info("发送文档CHUNKED事件，documentId: {}, segmentCount: {}", document.getDocId(), segmentCount);
+        DocumentChunkedEvent event=new DocumentChunkedEvent(this,document.getDocId(),document.getCurrentVersionId(),segmentCount);
+        eventPublisher.publishEvent(event);
+    }
+
+    private String extractObjectNameFromUrl(String url) {
+        if (url==null||url.isEmpty()){
+            return null;
+        }
+        // http://endpoint/bucketName/objectName
+        int lastSlashIndex=url.lastIndexOf(bucketName)+bucketName.length();
+        if (lastSlashIndex == -1 || lastSlashIndex == url.length() - 1) {
+            return null;
+        }
+        return url.substring(lastSlashIndex+1);
+    }
+
+    private static String enrichMetadata(Document document, DocumentVersion versionRecord, Metadata metadata) {
+        metadata.put(MetadataKeyConstant.DOC_ID,document.getDocId());
+        metadata.put(MetadataKeyConstant.FILE_NAME,document.getDocTitle());
+        metadata.put(MetadataKeyConstant.URL,versionRecord.getDocUrl());
+        if (document.getCurrentVersionId() != null) {
+            metadata.put(MetadataKeyConstant.VERSION,document.getCurrentVersionId());
+        }
+        return JSON.toJSONString(metadata.toMap());
+    }
+
     @DistributeLock(scene = "document-embed",keyExpression = "#documentVersion.versionId",waitTime = 0)
     private boolean embedAndStore(DocumentVersion documentVersion) {
         if (documentVersion==null)return false;
