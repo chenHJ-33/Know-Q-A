@@ -106,4 +106,9 @@ public class DocumentController {
         queryWrapper.orderByDesc("created_at");
         return documentService.page(page,queryWrapper);
     }
+    // 根据ID查询文档详情
+    @GetMapping("/{id:\\d+}")
+    public Document getById(@PathVariable Long id){
+        return documentService.getById(id);
+    }
 }
