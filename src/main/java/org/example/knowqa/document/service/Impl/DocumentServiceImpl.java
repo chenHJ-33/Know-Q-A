@@ -157,6 +157,29 @@ public class DocumentServiceImpl extends ServiceImpl<DocumentMapper, Document> i
         log.info("版本失效完成，versionId={}",versionId);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean removeDocumentsWithSegments(List<Long> docIds) {
+        if (docIds == null || docIds.isEmpty()) {
+            return false;
+        }
+        // 按 metadata 中的 docId 批量删除所有向量
+        deleteVectorsByDocIds(docIds);
+
+        // 物理删除这些文档下的所有分段
+        segmentMapper.physicalDeleteByDocumentIds(docIds);
+
+        // 物理删除这些文档的所有版本记录
+        documentVersionMapper.physicalDeleteByDocIds(docIds);
+
+        // 物理删除文档本身
+        return baseMapper.physicalDeleteByDocIds(docIds) > 0;
+    }
+
+    private void deleteVectorsByDocIds(List<Long> docIds) {
+        vectorStoreService.removeByDocIds(docIds);
+    }
+
     private boolean shouldAdvanceStatus(DocumentStatus status, DocumentStatus targetStatus) {
         if (status==null)return true;
         return status.ordinal()<targetStatus.ordinal();

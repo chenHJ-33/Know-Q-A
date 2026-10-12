@@ -10,4 +10,6 @@ public interface VectorStoreService {
     List<String> embedAndStore(List<KnowledgeSegment> batch);
 
     void removeByDocIdAndVersion(Long docId, Long versionId);
+
+    void removeByDocIds(List<Long> docIds);
 }

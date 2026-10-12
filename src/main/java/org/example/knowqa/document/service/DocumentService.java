@@ -5,6 +5,7 @@ import org.example.knowqa.document.constant.DocumentStatus;
 import org.example.knowqa.document.entity.Document;
 
 import javax.print.Doc;
+import java.util.List;
 
 public interface DocumentService extends IService<Document> {
     boolean removeDocumentWithSegments(Long docId);
@@ -14,4 +15,6 @@ public interface DocumentService extends IService<Document> {
     void activateVersion(Long versionId);
 
     void deactivateVersion(Long versionId);
+
+    boolean removeDocumentsWithSegments(List<Long> ids);
 }

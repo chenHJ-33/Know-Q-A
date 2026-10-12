@@ -73,43 +73,46 @@ public class DocumentController {
     public void activateVersion(@RequestParam("versionId") Long versionId) {
         documentService.activateVersion(versionId);
     }
+
     // 对文档进行切分
     @PostMapping("/split/{documentId}")
     public Integer splitDocument(
             @PathVariable Long documentId,
             @RequestParam("splitType") String splitType,
             @RequestParam("chunkSize") Integer chunkSize,
-            @RequestParam(value = "overlap",required = false) Integer overlap,
-            @RequestParam(value = "regex",required = false) String regex,
-            @RequestParam(value = "titleLevel",required = false) Integer titleLevel,
-            @RequestParam(value = "separator",required = false) String separator
+            @RequestParam(value = "overlap", required = false) Integer overlap,
+            @RequestParam(value = "regex", required = false) String regex,
+            @RequestParam(value = "titleLevel", required = false) Integer titleLevel,
+            @RequestParam(value = "separator", required = false) String separator
 
-    ){
+    ) {
         Document document = documentService.getById(documentId);
-        return documentProcessService.split(document,new DocumentSplitParam(splitType,chunkSize,overlap,titleLevel,separator,regex));
+        return documentProcessService.split(document, new DocumentSplitParam(splitType, chunkSize, overlap, titleLevel, separator, regex));
     }
+
     // 分页查询
     @GetMapping("/page")
     public Page<Document> page(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
-            @RequestParam(value = "docTitle",required = false) String docTitle,
-            @RequestParam(value = "status",required = false) String status
-    ){
-        Page<Document> page=new Page<>(current,size);
-        QueryWrapper<Document> queryWrapper=new QueryWrapper<>();
+            @RequestParam(value = "docTitle", required = false) String docTitle,
+            @RequestParam(value = "status", required = false) String status
+    ) {
+        Page<Document> page = new Page<>(current, size);
+        QueryWrapper<Document> queryWrapper = new QueryWrapper<>();
         if (docTitle != null) {
-            queryWrapper.like("doc_title",docTitle);
+            queryWrapper.like("doc_title", docTitle);
         }
         if (status != null) {
-            queryWrapper.eq("status",status);
+            queryWrapper.eq("status", status);
         }
         queryWrapper.orderByDesc("created_at");
-        return documentService.page(page,queryWrapper);
+        return documentService.page(page, queryWrapper);
     }
+
     // 根据ID查询文档详情
     @GetMapping("/{id:\\d+}")
-    public Document getById(@PathVariable Long id){
+    public Document getById(@PathVariable Long id) {
         return documentService.getById(id);
     }
 
@@ -124,9 +127,16 @@ public class DocumentController {
     public boolean updateById(@RequestBody Document document) {
         return documentService.updateById(document);
     }
-    //根据ID删除文档（逻辑删除，并级联删除该文档下的所有分段及向量）
+
+    // 根据ID删除文档（逻辑删除，并级联删除该文档下的所有分段及向量）
     @DeleteMapping("/{id:\\d+}")
-    public boolean removeById(@PathVariable Long id){
+    public boolean removeById(@PathVariable Long id) {
         return documentService.removeDocumentWithSegments(id);
+    }
+
+    // 批量删除文档
+    @DeleteMapping("/batch")
+    public boolean removeByIds(@RequestParam List<Long> ids) {
+        return documentService.removeDocumentsWithSegments(ids);
     }
 }

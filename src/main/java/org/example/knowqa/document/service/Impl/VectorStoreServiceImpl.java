@@ -66,6 +66,20 @@ public class VectorStoreServiceImpl implements VectorStoreService {
         }
     }
 
+    @Override
+    public void removeByDocIds(List<Long> docIds) {
+        if (CollectionUtils.isEmpty(docIds)) {
+            return;
+        }
+        try {
+            Filter filter = metadataKey(MetadataKeyConstant.DOC_ID).isIn(docIds);
+            embeddingStore.removeAll(filter);
+            log.info("按docIds批量删除向量成功, count: {}", docIds.size());
+        } catch (Exception e) {
+            log.warn("按docIds批量删除向量失败, count: {}, error: {}", docIds.size(), e.getMessage());
+        }
+    }
+
     private TextSegment toTextSegment(KnowledgeSegment segment) {
         Map<String, String> metadataMap = segment.getMetadataMap();
         Metadata metadata=metadataMap!=null?Metadata.from(metadataMap):new Metadata();
