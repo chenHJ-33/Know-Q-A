@@ -143,7 +143,7 @@ public class DocumentController {
     }
 
     // 处理文档上传中的参数异常
-    @ExceptionHandler(IllegalAccessError.class)
+    @ExceptionHandler(IllegalAccessException.class)
     public ResponseEntity<String> handleIllegalArgument(IllegalAccessException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
     }
