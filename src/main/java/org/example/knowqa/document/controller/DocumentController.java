@@ -1,5 +1,7 @@
 package org.example.knowqa.document.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.example.knowqa.common.DefaultUser;
@@ -84,5 +86,24 @@ public class DocumentController {
     ){
         Document document = documentService.getById(documentId);
         return documentProcessService.split(document,new DocumentSplitParam(splitType,chunkSize,overlap,titleLevel,separator,regex));
+    }
+    // 分页查询
+    @GetMapping("/page")
+    public Page<Document> page(
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(value = "docTitle",required = false) String docTitle,
+            @RequestParam(value = "status",required = false) String status
+    ){
+        Page<Document> page=new Page<>(current,size);
+        QueryWrapper<Document> queryWrapper=new QueryWrapper<>();
+        if (docTitle != null) {
+            queryWrapper.like("doc_title",docTitle);
+        }
+        if (status != null) {
+            queryWrapper.eq("status",status);
+        }
+        queryWrapper.orderByDesc("created_at");
+        return documentService.page(page,queryWrapper);
     }
 }
