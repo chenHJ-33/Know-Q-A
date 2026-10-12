@@ -14,6 +14,8 @@ import org.example.knowqa.document.service.DocumentProcessService;
 import org.example.knowqa.document.service.DocumentService;
 import org.example.knowqa.document.service.DocumentVersionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -138,5 +140,11 @@ public class DocumentController {
     @DeleteMapping("/batch")
     public boolean removeByIds(@RequestParam List<Long> ids) {
         return documentService.removeDocumentsWithSegments(ids);
+    }
+
+    // 处理文档上传中的参数异常
+    @ExceptionHandler(IllegalAccessError.class)
+    public ResponseEntity<String> handleIllegalArgument(IllegalAccessException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
     }
 }
