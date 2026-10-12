@@ -111,4 +111,10 @@ public class DocumentController {
     public Document getById(@PathVariable Long id){
         return documentService.getById(id);
     }
+
+    // 新增文档记录
+    @PostMapping
+    public boolean save(@RequestBody Document document) {
+        return documentService.save(document);
+    }
 }
