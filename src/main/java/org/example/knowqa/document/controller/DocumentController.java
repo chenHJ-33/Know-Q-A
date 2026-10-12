@@ -117,4 +117,10 @@ public class DocumentController {
     public boolean save(@RequestBody Document document) {
         return documentService.save(document);
     }
+
+    // 根据ID更新文档
+    @PutMapping
+    public boolean updateById(@RequestBody Document document) {
+        return documentService.updateById(document);
+    }
 }
