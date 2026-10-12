@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.annotations.Delete;
 import org.example.knowqa.common.DefaultUser;
 import org.example.knowqa.document.entity.Document;
 import org.example.knowqa.document.entity.DocumentSplitParam;
@@ -122,5 +123,10 @@ public class DocumentController {
     @PutMapping
     public boolean updateById(@RequestBody Document document) {
         return documentService.updateById(document);
+    }
+    //根据ID删除文档（逻辑删除，并级联删除该文档下的所有分段及向量）
+    @DeleteMapping("/{id:\\d+}")
+    public boolean removeById(@PathVariable Long id){
+        return documentService.removeDocumentWithSegments(id);
     }
 }
